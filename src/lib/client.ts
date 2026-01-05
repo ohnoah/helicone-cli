@@ -298,6 +298,7 @@ export class HeliconeClient {
  */
 export function buildFilter(conditions: {
   model?: string;
+  modelContains?: string;
   status?: number;
   userId?: string;
   provider?: string;
@@ -309,6 +310,9 @@ export function buildFilter(conditions: {
   maxLatency?: number;
   properties?: Record<string, string>;
   cached?: boolean;
+  search?: string;
+  requestBodyContains?: string;
+  responseBodyContains?: string;
 }): FilterNode {
   const filters: FilterNode[] = [];
 
@@ -317,6 +321,15 @@ export function buildFilter(conditions: {
     filters.push({
       request_response_rmt: {
         model: { equals: conditions.model },
+      },
+    });
+  }
+
+  // Model contains filter (partial match)
+  if (conditions.modelContains) {
+    filters.push({
+      request_response_rmt: {
+        model: { ilike: `%${conditions.modelContains}%` },
       },
     });
   }
@@ -415,6 +428,41 @@ export function buildFilter(conditions: {
     filters.push({
       request_response_rmt: {
         cache_enabled: { equals: conditions.cached },
+      },
+    });
+  }
+
+  // Search across request and response bodies
+  if (conditions.search) {
+    filters.push({
+      left: {
+        request_response_rmt: {
+          request_body: { contains: conditions.search },
+        },
+      },
+      operator: "or",
+      right: {
+        request_response_rmt: {
+          response_body: { contains: conditions.search },
+        },
+      },
+    });
+  }
+
+  // Request body contains filter
+  if (conditions.requestBodyContains) {
+    filters.push({
+      request_response_rmt: {
+        request_body: { contains: conditions.requestBodyContains },
+      },
+    });
+  }
+
+  // Response body contains filter
+  if (conditions.responseBodyContains) {
+    filters.push({
+      request_response_rmt: {
+        response_body: { contains: conditions.responseBodyContains },
       },
     });
   }

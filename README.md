@@ -121,6 +121,9 @@ helicone requests export --since 7d --include-body -o full-export.jsonl
 
 # See available fields
 helicone requests fields
+
+# Filter schema help
+helicone requests filter-help
 ```
 
 #### Request Filters
@@ -130,9 +133,15 @@ helicone requests fields
 | `--since` | Start date (ISO or relative) | `--since 7d`, `--since 2024-01-01` |
 | `--until` | End date | `--until 2024-01-31` |
 | `--model` | Model name | `--model gpt-4o` |
+| `--model-contains` | Partial model match | `--model-contains gpt-4` |
 | `--status` | HTTP status code | `--status 200` |
 | `--user-id` | Your app's user ID | `--user-id user_123` |
 | `--property` | Custom property | `-p key=value` |
+| `--search` | Search request/response bodies | `--search "refund policy"` |
+| `--request-contains` | Search request body | `--request-contains "function_call"` |
+| `--response-contains` | Search response body | `--response-contains "I apologize"` |
+| `--filter` | Raw filter JSON (advanced) | `--filter '{"request_response_rmt":{"status":{"equals":500}}}'` |
+| `--filter-file` | Load raw filter JSON from file | `--filter-file ./filter.json` |
 | `--min-cost` | Minimum cost (USD) | `--min-cost 0.01` |
 | `--max-cost` | Maximum cost (USD) | `--max-cost 1.00` |
 | `--min-latency` | Minimum latency (ms) | `--min-latency 1000` |

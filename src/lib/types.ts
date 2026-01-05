@@ -120,6 +120,8 @@ export type FilterOperator =
   | "not-equals"
   | "contains"
   | "not-contains"
+  | "like"
+  | "ilike"
   | "gte"
   | "lte"
   | "gt"
@@ -195,9 +197,15 @@ export interface ListOptions extends GlobalOptions {
   since?: string;
   until?: string;
   model?: string;
+  modelContains?: string;
   status?: string;
   userId?: string;
   property?: string[];
+  search?: string;
+  requestContains?: string;
+  responseContains?: string;
+  filter?: string;
+  filterFile?: string;
   minCost?: string;
   maxCost?: string;
   minLatency?: string;
