@@ -64,6 +64,12 @@ export function createAuthCommand(): Command {
 
       if (result.error) {
         spinner.fail(chalk.red(`Authentication failed: ${result.error}`));
+        const otherRegion = region === "us" ? "eu" : "us";
+        console.log(
+          chalk.yellow(
+            `\nCurrent region: ${region.toUpperCase()}. Did you mean to use --region ${otherRegion}?`
+          )
+        );
         process.exit(1);
       }
 
