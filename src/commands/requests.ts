@@ -6,8 +6,8 @@ import { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
 import * as fs from "fs";
-import { getAuthContext } from "../lib/config.js";
-import { HeliconeClient, buildFilter, parseDate } from "../lib/client.js";
+import { createHeliconeClient } from "../lib/client-factory.js";
+import { buildFilter, parseDate } from "../lib/client.js";
 import {
   formatRequests,
   parseFields,
@@ -39,6 +39,13 @@ function combineFilters(filter1: FilterNode | null, filter2: FilterNode): Filter
   };
 }
 
+function addGatewayOptions(command: Command): Command {
+  return command
+    .option("--mode <mode>", "Connection mode (raw or gateway)")
+    .option("--gateway-url <url>", "Gateway base URL")
+    .option("--gateway-token <token>", "Gateway token");
+}
+
 export function createRequestsCommand(): Command {
   const requests = new Command("requests").description(
     "Query and export request data"
@@ -47,7 +54,7 @@ export function createRequestsCommand(): Command {
   // ============================================================================
   // helicone requests list
   // ============================================================================
-  requests
+  const list = requests
     .command("list")
     .description("List requests with optional filters")
     .option("-n, --limit <number>", "Maximum number of results", "25")
@@ -98,8 +105,7 @@ export function createRequestsCommand(): Command {
     .option("-q, --quiet", "Suppress non-essential output")
     .action(async (options: ListOptions & { cached?: boolean; property: string[] }) => {
       try {
-        const auth = getAuthContext(options.apiKey, options.region);
-        const client = new HeliconeClient(auth);
+        const client = createHeliconeClient(options);
 
         // Parse filters
         const startDate = options.since ? parseDate(options.since) : undefined;
@@ -215,11 +221,12 @@ export function createRequestsCommand(): Command {
         process.exit(1);
       }
     });
+  addGatewayOptions(list);
 
   // ============================================================================
   // helicone requests get
   // ============================================================================
-  requests
+  const get = requests
     .command("get <requestId>")
     .description("Get a single request by ID with flexible viewing options")
     .option(
@@ -241,8 +248,7 @@ export function createRequestsCommand(): Command {
     .option("--region <region>", "API region (us or eu)")
     .action(async (requestId: string, options: GetOptions & { show?: string; extract?: string; raw?: boolean }) => {
       try {
-        const auth = getAuthContext(options.apiKey, options.region);
-        const client = new HeliconeClient(auth);
+        const client = createHeliconeClient(options);
 
         const spinner = ora("Fetching request...").start();
 
@@ -334,11 +340,12 @@ export function createRequestsCommand(): Command {
         process.exit(1);
       }
     });
+  addGatewayOptions(get);
 
   // ============================================================================
   // helicone requests export
   // ============================================================================
-  requests
+  const exportCmd = requests
     .command("export")
     .description("Export requests to a file with pagination handling")
     .option("-o, --output <path>", "Output file path", "requests-export.jsonl")
@@ -385,8 +392,7 @@ export function createRequestsCommand(): Command {
     .option("--region <region>", "API region (us or eu)")
     .action(async (options: ExportOptions & { property: string[] }) => {
       try {
-        const auth = getAuthContext(options.apiKey, options.region);
-        const client = new HeliconeClient(auth);
+        const client = createHeliconeClient(options);
 
         // Parse filters
         const startDate = options.since ? parseDate(options.since) : undefined;
@@ -578,6 +584,7 @@ export function createRequestsCommand(): Command {
         process.exit(1);
       }
     });
+  addGatewayOptions(exportCmd);
 
   // ============================================================================
   // helicone requests fields

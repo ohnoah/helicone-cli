@@ -76,6 +76,26 @@ helicone auth logout
 
 Credentials are stored in `~/.helicone/config.yaml` with restricted permissions.
 
+## Gateway mode
+
+Read-only gateway mode routes requests through the agent gateway (no direct Helicone API key required for gateway calls).
+
+```bash
+# Store gateway credentials and default to gateway mode
+helicone auth gateway --gateway-url https://<gateway>.vercel.app --gateway-token <token>
+
+# Run read-only commands via the gateway
+helicone requests list --mode gateway
+helicone requests get <request-id> --mode gateway
+helicone metrics summary --mode gateway
+```
+
+Environment variables:
+
+- `HELICONE_MODE=gateway`
+- `GATEWAY_URL=...`
+- `GATEWAY_TOKEN=...`
+
 ## Commands
 
 ### Requests

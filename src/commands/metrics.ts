@@ -6,9 +6,21 @@ import { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
 import Table from "cli-table3";
-import { getAuthContext } from "../lib/config.js";
-import { HeliconeClient, buildFilter, parseDate } from "../lib/client.js";
+import { createHeliconeClient } from "../lib/client-factory.js";
+import { buildFilter, parseDate } from "../lib/client.js";
+import { getMode } from "../lib/config.js";
 import type { OutputFormat } from "../lib/types.js";
+
+function addGatewayOptions(command: Command): Command {
+  return command
+    .option("--mode <mode>", "Connection mode (raw or gateway)")
+    .option("--gateway-url <url>", "Gateway base URL")
+    .option("--gateway-token <token>", "Gateway token");
+}
+
+function getSampleLimit(mode: "raw" | "gateway"): number {
+  return mode === "gateway" ? 200 : 1000;
+}
 
 export function createMetricsCommand(): Command {
   const metrics = new Command("metrics").description(
@@ -18,7 +30,7 @@ export function createMetricsCommand(): Command {
   // ============================================================================
   // helicone metrics summary
   // ============================================================================
-  metrics
+  const summary = metrics
     .command("summary")
     .description("Show summary metrics for a time period")
     .option(
@@ -33,8 +45,7 @@ export function createMetricsCommand(): Command {
     .option("--region <region>", "API region (us or eu)")
     .action(async (options) => {
       try {
-        const auth = getAuthContext(options.apiKey, options.region);
-        const client = new HeliconeClient(auth);
+        const client = createHeliconeClient(options);
 
         const startDate = options.since
           ? parseDate(options.since)
@@ -47,6 +58,9 @@ export function createMetricsCommand(): Command {
           endDate,
         });
 
+        const mode = getMode(options.mode);
+        const sampleLimit = getSampleLimit(mode);
+
         const spinner = ora("Fetching metrics...").start();
 
         // Fetch request count and get sample for aggregation
@@ -54,7 +68,7 @@ export function createMetricsCommand(): Command {
           client.countRequests(filter),
           client.queryRequests({
             filter,
-            limit: 1000, // Sample for metrics
+            limit: sampleLimit, // Sample for metrics
             sort: { created_at: "desc" },
           }),
         ]);
@@ -223,29 +237,127 @@ export function createMetricsCommand(): Command {
         process.exit(1);
       }
     });
+  addGatewayOptions(summary);
 
   // ============================================================================
   // helicone metrics cost
   // ============================================================================
-  metrics
+  const cost = metrics
     .command("cost")
     .description("Show cost breakdown")
     .option("--since <date>", "Start date", "30d")
     .option("--until <date>", "End date")
-    .option("--by <grouping>", "Group by: model, provider, day", "model")
+    .option("--by <grouping>", "Group by: model, provider, day, user", "model")
+    .option("-n, --limit <number>", "Limit results (for user grouping)", "50")
     .option("-f, --format <format>", "Output format: table, json", "table")
     .option("--api-key <key>", "Helicone API key")
     .option("--region <region>", "API region (us or eu)")
     .action(async (options) => {
       try {
-        const auth = getAuthContext(options.apiKey, options.region);
-        const client = new HeliconeClient(auth);
+        const client = createHeliconeClient(options);
 
         const startDate = options.since
           ? parseDate(options.since)
           : parseDate("30d");
         const endDate = options.until ? parseDate(options.until) : new Date();
 
+        const mode = getMode(options.mode);
+        const sampleLimit = getSampleLimit(mode);
+
+        const grouping = options.by || "model";
+
+        // Use dedicated user metrics endpoint for user grouping
+        if (grouping === "user") {
+          const spinner = ora("Fetching user metrics...").start();
+
+          const result = await client.queryUserMetrics({
+            filter: "all",
+            limit: parseInt(options.limit, 10) || 50,
+            timeFilter: {
+              startTimeUnixSeconds: Math.floor(startDate.getTime() / 1000),
+              endTimeUnixSeconds: Math.floor(endDate.getTime() / 1000),
+            },
+          });
+
+          if (result.error) {
+            spinner.fail(chalk.red(`Error: ${result.error}`));
+            process.exit(1);
+          }
+
+          spinner.stop();
+
+          const users = result.data?.users || [];
+
+          // Sort by cost descending
+          const sorted = [...users].sort((a, b) => b.cost - a.cost);
+          const totalCost = sorted.reduce((sum, u) => sum + u.cost, 0);
+          const totalRequests = sorted.reduce((sum, u) => sum + u.total_requests, 0);
+
+          if (options.format === "json") {
+            const output = {
+              grouping: "user",
+              timeRange: {
+                start: startDate.toISOString(),
+                end: endDate.toISOString(),
+              },
+              totalCost,
+              totalRequests,
+              users: sorted.map((u) => ({
+                user_id: u.user_id,
+                cost: u.cost,
+                requests: u.total_requests,
+                prompt_tokens: u.total_prompt_tokens,
+                completion_tokens: u.total_completion_tokens,
+                first_active: u.first_active,
+                last_active: u.last_active,
+              })),
+            };
+            console.log(JSON.stringify(output, null, 2));
+          } else {
+            console.log(chalk.bold(`\n💰 Cost Breakdown (by user)\n`));
+            console.log(
+              chalk.dim(
+                `Time range: ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`
+              )
+            );
+            console.log();
+
+            const table = new Table({
+              head: [
+                chalk.bold("User"),
+                chalk.bold("Cost"),
+                chalk.bold("Requests"),
+                chalk.bold("Prompt Tokens"),
+                chalk.bold("Completion Tokens"),
+                chalk.bold("%"),
+              ],
+              style: { head: [], border: [] },
+            });
+
+            for (const user of sorted) {
+              const pct = totalCost > 0 ? (user.cost / totalCost) * 100 : 0;
+              table.push([
+                chalk.cyan(user.user_id),
+                `$${user.cost.toFixed(4)}`,
+                user.total_requests.toLocaleString(),
+                user.total_prompt_tokens.toLocaleString(),
+                user.total_completion_tokens.toLocaleString(),
+                `${pct.toFixed(1)}%`,
+              ]);
+            }
+
+            console.log(table.toString());
+            console.log(
+              chalk.bold(
+                `\nTotal: $${totalCost.toFixed(2)} across ${totalRequests.toLocaleString()} requests from ${sorted.length} users`
+              )
+            );
+          }
+
+          return;
+        }
+
+        // Original logic for model/provider/day grouping
         const filter = buildFilter({ startDate, endDate });
 
         const spinner = ora("Calculating costs...").start();
@@ -253,7 +365,7 @@ export function createMetricsCommand(): Command {
         // Fetch requests for cost calculation
         const result = await client.queryRequests({
           filter,
-          limit: 1000,
+          limit: sampleLimit,
           sort: { created_at: "desc" },
         });
 
@@ -267,7 +379,6 @@ export function createMetricsCommand(): Command {
         const requests = result.data || [];
 
         // Group costs
-        const grouping = options.by || "model";
         const groups: Record<string, { cost: number; count: number; tokens: number }> = {};
 
         for (const req of requests) {
@@ -354,11 +465,12 @@ export function createMetricsCommand(): Command {
         process.exit(1);
       }
     });
+  addGatewayOptions(cost);
 
   // ============================================================================
   // helicone metrics errors
   // ============================================================================
-  metrics
+  const errors = metrics
     .command("errors")
     .description("Show error statistics")
     .option("--since <date>", "Start date", "7d")
@@ -368,8 +480,7 @@ export function createMetricsCommand(): Command {
     .option("--region <region>", "API region (us or eu)")
     .action(async (options) => {
       try {
-        const auth = getAuthContext(options.apiKey, options.region);
-        const client = new HeliconeClient(auth);
+        const client = createHeliconeClient(options);
 
         const startDate = options.since
           ? parseDate(options.since)
@@ -382,7 +493,7 @@ export function createMetricsCommand(): Command {
 
         const result = await client.queryRequests({
           filter,
-          limit: 1000,
+          limit: sampleLimit,
           sort: { created_at: "desc" },
         });
 
@@ -470,6 +581,7 @@ export function createMetricsCommand(): Command {
         process.exit(1);
       }
     });
+  addGatewayOptions(errors);
 
   return metrics;
 }

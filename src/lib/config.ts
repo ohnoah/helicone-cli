@@ -70,6 +70,61 @@ export function getApiKey(cliApiKey?: string): string | undefined {
 }
 
 /**
+ * Get CLI mode from various sources
+ */
+export function getMode(cliMode?: string): "raw" | "gateway" {
+  if (cliMode === "raw" || cliMode === "gateway") {
+    return cliMode;
+  }
+
+  const envMode = process.env.HELICONE_MODE;
+  if (envMode === "raw" || envMode === "gateway") {
+    return envMode;
+  }
+
+  const config = loadConfig();
+  if (config.mode === "raw" || config.mode === "gateway") {
+    return config.mode;
+  }
+
+  return "raw";
+}
+
+/**
+ * Get gateway URL from various sources
+ */
+export function getGatewayUrl(cliUrl?: string): string | undefined {
+  if (cliUrl) {
+    return cliUrl;
+  }
+
+  const envUrl = process.env.GATEWAY_URL || process.env.HELICONE_GATEWAY_URL;
+  if (envUrl) {
+    return envUrl;
+  }
+
+  const config = loadConfig();
+  return config.gatewayUrl;
+}
+
+/**
+ * Get gateway token from various sources
+ */
+export function getGatewayToken(cliToken?: string): string | undefined {
+  if (cliToken) {
+    return cliToken;
+  }
+
+  const envToken = process.env.GATEWAY_TOKEN || process.env.HELICONE_GATEWAY_TOKEN;
+  if (envToken) {
+    return envToken;
+  }
+
+  const config = loadConfig();
+  return config.gatewayToken;
+}
+
+/**
  * Get region from various sources
  */
 export function getRegion(cliRegion?: string): "us" | "eu" {
@@ -125,6 +180,31 @@ export function storeApiKey(apiKey: string, region?: "us" | "eu"): void {
   if (region) {
     config.region = region;
   }
+  saveConfig(config);
+}
+
+/**
+ * Store gateway credentials in config
+ */
+export function storeGatewayCredentials(
+  gatewayUrl: string,
+  gatewayToken: string,
+  mode: "raw" | "gateway" = "gateway"
+): void {
+  const config = loadConfig();
+  config.gatewayUrl = gatewayUrl;
+  config.gatewayToken = gatewayToken;
+  config.mode = mode;
+  saveConfig(config);
+}
+
+/**
+ * Remove stored gateway credentials
+ */
+export function clearGatewayCredentials(): void {
+  const config = loadConfig();
+  delete config.gatewayUrl;
+  delete config.gatewayToken;
   saveConfig(config);
 }
 

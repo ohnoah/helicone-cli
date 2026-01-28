@@ -11,6 +11,9 @@ export interface Config {
   region?: "us" | "eu";
   defaultLimit?: number;
   defaultTimeRange?: string; // e.g., "7d", "30d", "24h"
+  mode?: "raw" | "gateway";
+  gatewayUrl?: string;
+  gatewayToken?: string;
 }
 
 export interface AuthContext {
@@ -187,6 +190,9 @@ export interface GlobalOptions {
   apiKey?: string;
   region?: "us" | "eu";
   quiet?: boolean;
+  mode?: "raw" | "gateway";
+  gatewayUrl?: string;
+  gatewayToken?: string;
 }
 
 export interface ListOptions extends GlobalOptions {
@@ -221,4 +227,37 @@ export interface ExportOptions extends ListOptions {
 export interface GetOptions extends GlobalOptions {
   format?: OutputFormat;
   includeBody?: boolean;
+}
+
+// ============================================================================
+// User Metrics Types
+// ============================================================================
+
+export interface UserMetrics {
+  user_id: string;
+  id: string;
+  active_for: string;
+  first_active: string;
+  last_active: string;
+  total_requests: number;
+  average_requests_per_day_active: number;
+  average_tokens_per_request: number;
+  total_completion_tokens: number;
+  total_prompt_tokens: number;
+  cost: number;
+  rate_limited_count: string;
+}
+
+export interface UserMetricsQueryParams {
+  filter: FilterNode;
+  offset?: number;
+  limit?: number;
+  timeFilter: {
+    startTimeUnixSeconds: number;
+    endTimeUnixSeconds: number;
+  };
+}
+
+export interface UserMetricsResponse {
+  users: UserMetrics[];
 }

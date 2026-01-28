@@ -10,6 +10,8 @@ import type {
   RequestQueryParams,
   SessionQueryParams,
   FilterNode,
+  UserMetricsQueryParams,
+  UserMetricsResponse,
 } from "./types.js";
 
 // ============================================================================
@@ -265,6 +267,26 @@ export class HeliconeClient {
     };
 
     return this.request("POST", "/v1/dashboard/scores/query", body);
+  }
+
+  /**
+   * Query user metrics with aggregated costs
+   */
+  async queryUserMetrics(
+    params: UserMetricsQueryParams
+  ): Promise<ApiResult<UserMetricsResponse>> {
+    const body = {
+      filter: params.filter ?? "all",
+      offset: params.offset ?? 0,
+      limit: params.limit ?? 100,
+      timeFilter: params.timeFilter,
+    };
+
+    return this.request<UserMetricsResponse>(
+      "POST",
+      "/v1/user/metrics/query",
+      body
+    );
   }
 
   // ==========================================================================

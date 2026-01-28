@@ -6,8 +6,8 @@ import { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
 import * as fs from "fs";
-import { getAuthContext } from "../lib/config.js";
-import { HeliconeClient, parseDate } from "../lib/client.js";
+import { createHeliconeClient } from "../lib/client-factory.js";
+import { parseDate } from "../lib/client.js";
 import {
   formatSessions,
   SESSION_DEFAULT_FIELDS,
@@ -28,6 +28,13 @@ const SESSION_AVAILABLE_FIELDS = [
   "last_request_at",
 ];
 
+function addGatewayOptions(command: Command): Command {
+  return command
+    .option("--mode <mode>", "Connection mode (raw or gateway)")
+    .option("--gateway-url <url>", "Gateway base URL")
+    .option("--gateway-token <token>", "Gateway token");
+}
+
 export function createSessionsCommand(): Command {
   const sessions = new Command("sessions").description(
     "Query and export session/trace data"
@@ -36,7 +43,7 @@ export function createSessionsCommand(): Command {
   // ============================================================================
   // helicone sessions list
   // ============================================================================
-  sessions
+  const list = sessions
     .command("list")
     .description("List sessions with optional filters")
     .option("-n, --limit <number>", "Maximum number of results", "25")
@@ -63,8 +70,7 @@ export function createSessionsCommand(): Command {
     .option("-q, --quiet", "Suppress non-essential output")
     .action(async (options: ListOptions & { search?: string; name?: string }) => {
       try {
-        const auth = getAuthContext(options.apiKey, options.region);
-        const client = new HeliconeClient(auth);
+        const client = createHeliconeClient(options);
 
         // Parse time range
         const startDate = options.since
@@ -148,11 +154,12 @@ export function createSessionsCommand(): Command {
         process.exit(1);
       }
     });
+  addGatewayOptions(list);
 
   // ============================================================================
   // helicone sessions get
   // ============================================================================
-  sessions
+  const get = sessions
     .command("get <sessionId>")
     .description("Get details for a specific session including its requests")
     .option(
@@ -165,8 +172,7 @@ export function createSessionsCommand(): Command {
     .option("--region <region>", "API region (us or eu)")
     .action(async (sessionId: string, options) => {
       try {
-        const auth = getAuthContext(options.apiKey, options.region);
-        const client = new HeliconeClient(auth);
+        const client = createHeliconeClient(options);
 
         const spinner = ora("Fetching session...").start();
 
@@ -181,7 +187,7 @@ export function createSessionsCommand(): Command {
           },
           timezoneDifference,
           filter: {
-            sessions_request_response_rmt: {
+            request_response_rmt: {
               properties: {
                 "Helicone-Session-Id": { equals: sessionId },
               },
@@ -271,11 +277,12 @@ export function createSessionsCommand(): Command {
         process.exit(1);
       }
     });
+  addGatewayOptions(get);
 
   // ============================================================================
   // helicone sessions export
   // ============================================================================
-  sessions
+  const exportCmd = sessions
     .command("export")
     .description("Export sessions to a file")
     .option("-o, --output <path>", "Output file path", "sessions-export.jsonl")
@@ -297,8 +304,7 @@ export function createSessionsCommand(): Command {
     .option("--region <region>", "API region (us or eu)")
     .action(async (options) => {
       try {
-        const auth = getAuthContext(options.apiKey, options.region);
-        const client = new HeliconeClient(auth);
+        const client = createHeliconeClient(options);
 
         const startDate = options.since
           ? parseDate(options.since)
@@ -452,6 +458,7 @@ export function createSessionsCommand(): Command {
         process.exit(1);
       }
     });
+  addGatewayOptions(exportCmd);
 
   // ============================================================================
   // helicone sessions fields

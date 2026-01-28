@@ -7,11 +7,16 @@ import chalk from "chalk";
 import ora from "ora";
 import {
   storeApiKey,
+  storeGatewayCredentials,
   clearCredentials,
+  clearGatewayCredentials,
   hasStoredCredentials,
   getConfigPath,
   getApiKey,
   getRegion,
+  getGatewayUrl,
+  getGatewayToken,
+  getMode,
 } from "../lib/config.js";
 import { HeliconeClient } from "../lib/client.js";
 
@@ -99,6 +104,72 @@ export function createAuthCommand(): Command {
     });
 
   // ============================================================================
+  // helicone auth gateway
+  // ============================================================================
+  auth
+    .command("gateway")
+    .description("Store gateway credentials for gateway mode")
+    .option("--gateway-url <url>", "Gateway base URL")
+    .option("--gateway-token <token>", "Gateway token")
+    .option("--mode <mode>", "Default mode (raw or gateway)", "gateway")
+    .action(async (options) => {
+      let gatewayUrl = options.gatewayUrl || getGatewayUrl();
+      let gatewayToken = options.gatewayToken || getGatewayToken();
+
+      if (!gatewayUrl) {
+        const { default: Enquirer } = await import("enquirer");
+        const enquirer = new Enquirer();
+        const response = await enquirer.prompt<{ gatewayUrl: string }>({
+          type: "input",
+          name: "gatewayUrl",
+          message: "Enter your Gateway URL:",
+        });
+        gatewayUrl = response.gatewayUrl;
+      }
+
+      if (!gatewayToken) {
+        const { default: Enquirer } = await import("enquirer");
+        const enquirer = new Enquirer();
+        const response = await enquirer.prompt<{ gatewayToken: string }>({
+          type: "password",
+          name: "gatewayToken",
+          message: "Enter your Gateway token:",
+        });
+        gatewayToken = response.gatewayToken;
+      }
+
+      if (!gatewayUrl || !gatewayToken) {
+        console.error(chalk.red("Error: Gateway URL and token are required"));
+        process.exit(1);
+      }
+
+      const mode = options.mode === "raw" ? "raw" : "gateway";
+      storeGatewayCredentials(gatewayUrl, gatewayToken, mode);
+      console.log(chalk.green("Gateway credentials saved"));
+      console.log(chalk.dim(`Gateway URL: ${gatewayUrl}`));
+      console.log(chalk.dim(`Default mode: ${mode}`));
+      console.log(chalk.dim(`Config: ${getConfigPath()}`));
+    });
+
+  // ============================================================================
+  // helicone auth gateway-logout
+  // ============================================================================
+  auth
+    .command("gateway-logout")
+    .description("Remove stored gateway credentials")
+    .action(() => {
+      const url = getGatewayUrl();
+      const token = getGatewayToken();
+      if (!url && !token) {
+        console.log(chalk.yellow("No stored gateway credentials found"));
+        return;
+      }
+      clearGatewayCredentials();
+      console.log(chalk.green("Gateway credentials removed"));
+      console.log(chalk.dim(`Config: ${getConfigPath()}`));
+    });
+
+  // ============================================================================
   // helicone auth status
   // ============================================================================
   auth
@@ -107,10 +178,17 @@ export function createAuthCommand(): Command {
     .action(async () => {
       const apiKey = getApiKey();
       const region = getRegion();
+      const mode = getMode();
+      const gatewayUrl = getGatewayUrl();
+      const gatewayToken = getGatewayToken();
 
       console.log(chalk.bold("\nAuthentication Status\n"));
 
       // Check for API key sources
+      const hasApiKey =
+        !!process.env.HELICONE_API_KEY || hasStoredCredentials();
+      const hasGateway = !!gatewayUrl && !!gatewayToken;
+
       if (process.env.HELICONE_API_KEY) {
         console.log(
           chalk.green("✓"),
@@ -125,15 +203,29 @@ export function createAuthCommand(): Command {
         );
       } else {
         console.log(chalk.red("✗"), "API Key:", chalk.red("Not configured"));
-        console.log(
-          chalk.dim(
-            "\n  Run 'helicone auth login' or set HELICONE_API_KEY environment variable"
-          )
-        );
-        return;
+        if (!hasGateway || mode !== "gateway") {
+          console.log(
+            chalk.dim(
+              "\n  Run 'helicone auth login' or set HELICONE_API_KEY environment variable"
+            )
+          );
+          return;
+        }
       }
 
       console.log("  Region:", chalk.cyan(region.toUpperCase()));
+
+      console.log("  Mode:", chalk.cyan(mode.toUpperCase()));
+      if (gatewayUrl) {
+        console.log(chalk.green("✓"), "Gateway URL:", chalk.dim(gatewayUrl));
+      }
+      if (gatewayToken) {
+        console.log(
+          chalk.green("✓"),
+          "Gateway Token:",
+          chalk.dim("(stored)")
+        );
+      }
 
       // Verify the key works
       if (apiKey) {
